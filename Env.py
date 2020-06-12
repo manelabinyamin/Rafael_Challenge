@@ -14,8 +14,8 @@ class environment:
         self.max_r_vel, self.max_i_vel = 1000, 800  # [m]
         self.action_space = 4
         state_space = {
-            'rockets': (None,2),
-            'interceptors': (None,2),
+            'rockets': (None,4),
+            'interceptors': (None,4),
             'cities': (2,),
             'angle': (1,),
             'can_shoot': (1,)
@@ -101,7 +101,11 @@ class environment:
         scaled_missils = []
         for m in missils:
             x, y = m[0]/self.width, m[1]/self.height
-            scaled_missils.append([x, y])
+            if type == 'rockets':
+                vx, vy = m[2]/self.max_r_vel, m[3]/self.max_r_vel
+            else:
+                vx, vy = m[2] / self.max_i_vel, m[3] / self.max_i_vel
+            scaled_missils.append([x, y, vx, vy])
         return scaled_missils
 
     def get_state_space(self):

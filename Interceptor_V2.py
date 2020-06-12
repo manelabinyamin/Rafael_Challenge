@@ -259,13 +259,13 @@ def Game_step(action_button):
     Check_interception()
     Check_ground_hit()
     
-    r_locs = np.zeros(shape=(len(rocket_list), 2))
+    r_locs = np.zeros(shape=(len(rocket_list), 4))
     for ind in range(len(rocket_list)):
-        r_locs[ind, :] = [rocket_list[ind].x, rocket_list[ind].y]
+        r_locs[ind, :] = [rocket_list[ind].x, rocket_list[ind].y, rocket_list[ind].vx ,rocket_list[ind].vy]
     
-    i_locs = np.zeros(shape=(len(interceptor_list), 2))
+    i_locs = np.zeros(shape=(len(interceptor_list), 4))
     for ind in range(len(interceptor_list)):
-        i_locs[ind, :] = [interceptor_list[ind].x, interceptor_list[ind].y]
+        i_locs[ind, :] = [interceptor_list[ind].x, interceptor_list[ind].y, interceptor_list[ind].vx, interceptor_list[ind].vy]
         
     c_locs = np.zeros(shape=(len(city_list), 2))
     for ind in range(len(city_list)):
