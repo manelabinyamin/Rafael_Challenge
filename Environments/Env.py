@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from box import Box
-from Interceptor_V2 import Init, Draw, Game_step
+from Environments.Interceptor_V2 import Init, Draw, Game_step
 
 class environment:
     def __init__(self):
@@ -46,7 +46,7 @@ class environment:
         self.step_count += 1
         if self.step_count >= self.max_step:
             self.done = True
-        return self.obs, self.reward, self.done
+        return self.obs, self.reward, self.done, None
 
     def render(self):
         Draw()
@@ -110,3 +110,6 @@ class environment:
 
     def get_state_space(self):
         return self.state_space.copy()
+
+    def get_game_score(self):
+        return self.total_score
