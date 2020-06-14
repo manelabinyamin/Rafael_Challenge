@@ -4,9 +4,22 @@ from torch.distributions import Categorical
 from PPO_algo.PPO import PPO, Memory
 from Environments.Env import environment
 from time import time
+import matplotlib.pyplot as plt
+
+
+
+def plot_scores(ax, scores, add_legend=False):
+    ax.plot(range(len(scores)), scores, color='blue', label='Score')
+    ax.set_title('Game Score')
+    if add_legend:
+        ax.legend()
+
 
 def main():
     ############## Hyperparameters ##############
+    # plots
+    fig, axes = plt.subplots(1, 1)
+    plot_scores(axes[0], [], add_legend=True)
     # creating environment
     env = environment()
     state_dim = env.state_space
@@ -65,7 +78,7 @@ def main():
 
         # Logging
         print('Iteration {} | Iter-time: {} | Score {} |'.format(iter, time()-start_time, training_scores[-1]))
-        plot_scores(training_scores)
+        plot_scores(axes[0], training_scores)
         if training_scores[-1] > max_score:
             # save model
             max_score = training_scores[-1]
