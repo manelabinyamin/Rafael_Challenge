@@ -3,36 +3,43 @@ import torch.nn as nn
 from torch.distributions import Categorical
 from PPO_algo.NN_Model import ActorCritic
 
+
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 class Memory:
     def __init__(self):
         self.actions = []
-        self.states = []
+        self.states_rockets = []
+        self.states_cities = []
+        self.states_interceptors = []
+        self.states_angles = []
         self.logprobs = []
         self.rewards = []
         self.is_terminals = []
 
     def clear_memory(self):
         del self.actions[:]
-        del self.states[:]
+        del self.states_rockets[:]
+        del self.states_cities[:]
+        del self.states_interceptors[:]
+        del self.states_angles[:]
         del self.logprobs[:]
         del self.rewards[:]
         del self.is_terminals[:]
 
 
 class PPO:
-    def __init__(self, state_dim, action_dim, n_latent_var, lr, betas, gamma, K_epochs, eps_clip):
+    def __init__(self, nn_args, lr, betas, gamma, K_epochs, eps_clip):
         self.lr = lr
         self.betas = betas
         self.gamma = gamma
         self.eps_clip = eps_clip
         self.K_epochs = K_epochs
 
-        self.policy = ActorCritic(state_dim, action_dim, n_latent_var).to(device)
+        self.policy = ActorCritic(nn_args, device).to(device)
         self.optimizer = torch.optim.Adam(self.policy.parameters(), lr=lr, betas=betas)
-        self.policy_old = ActorCritic(state_dim, action_dim, n_latent_var).to(device)
+        self.policy_old = ActorCritic(nn_args, device).to(device)
         self.policy_old.load_state_dict(self.policy.state_dict())
 
         self.MseLoss = nn.MSELoss()
@@ -52,7 +59,8 @@ class PPO:
         rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-5)
 
         # convert list to tensor
-        old_states = torch.stack(memory.states).to(device).detach()
+        # old_states = torch.stack(memory.states).to(device).detach()
+        old_states = [memory.states_rockets, memory.states_interceptors, memory.states_cities, memory.states_angles]
         old_actions = torch.stack(memory.actions).to(device).detach()
         old_logprobs = torch.stack(memory.logprobs).to(device).detach()
 

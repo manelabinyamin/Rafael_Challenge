@@ -18,7 +18,6 @@ class environment:
             'interceptors': (None,4),
             'cities': (2,),
             'angle': (1,),
-            'can_shoot': (1,)
         }
         self.state_space = Box(state_space)
 
@@ -65,7 +64,7 @@ class environment:
             'angle': angle[np.newaxis,:],
             'cities': cities[np.newaxis,:],
         }
-        obs_vec = [obs['rockets'], obs['interceptors'], obs['angle'], obs['cities']]
+        obs_vec = [obs['rockets'], obs['interceptors'], obs['cities'], obs['angle']]
         return obs_vec
 
     def preprocess_observation(self, r_locs, i_locs, c_locs, ang):
