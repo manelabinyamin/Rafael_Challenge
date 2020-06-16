@@ -7,6 +7,8 @@ from time import time
 import matplotlib.pyplot as plt
 import box
 import numpy as np
+import os
+from datetime import datetime
 
 
 def get_params():
@@ -35,16 +37,16 @@ def main():
     env = environment()
     render = False
     solved_reward = 100  # stop training if avg_reward > solved_reward
-    log_interval = 20  # print avg reward in the interval
+    score_window_size = 20  # window size for smoothed score
     max_episodes = 10000  # max training episodes
     lr = 1e-4
-    entropy_loss = 1e-3
     betas = (0.9, 0.999)
     gamma = 0.99  # discount factor
     K_epochs = 5  # update policy for K epochs
     eps_clip = 0.2  # clip parameter for PPO
     random_seed = None
     nn_params = get_params()
+    model_path = os.getcwd()+'/runs/'+datetime.now().strftime("%d_%m_%Y__%S_%M_%H")+'/'
     #############################################
 
     if random_seed:
@@ -84,10 +86,11 @@ def main():
 
             # save scores
             training_scores.append(float(temp_scores/K_epochs))
-            if len(smoothed_scores) > 5:
-                smoothed_scores.append(0.2*training_scores[-1]+0.8*smoothed_scores[-1])
-            else:  # first five scores
-                smoothed_scores.append(np.mean(training_scores))
+            smoothed_scores.append(np.mean(training_scores[-score_window_size:]))
+            # if len(smoothed_scores) > 5:
+            #     smoothed_scores.append(0.2*training_scores[-1]+0.8*smoothed_scores[-1])
+            # else:  # first five scores
+            #     smoothed_scores.append(np.mean(training_scores))
 
             # update agent on the last k episodes
             ppo.update(memory)
@@ -98,10 +101,14 @@ def main():
             fig.canvas.draw()
             fig.canvas.flush_events()
             plt.pause(0.0001)
-            if training_scores[-1] > max_score:
+            if smoothed_scores[-1] > max_score:
                 # save model
-                max_score = training_scores[-1]
-                #TODO: save model
+                max_score = smoothed_scores[-1]
+                #save model
+                if not os.path.exists(model_path):
+                    os.makedirs(model_path)
+                path = model_path+'score_{}.pt'.format(max_score)
+                torch.save(ppo.policy.state_dict(), path)
 
     except KeyboardInterrupt:
         # save model, scores and smoothing scores

@@ -48,20 +48,6 @@ class ActorCritic(nn.Module):
         out = self.pool(encoded, dim=1)
         return out
 
-    # def DeepSets(self, seq):
-    #     if len(seq[0]) > 0:
-    #         embed_seq = []
-    #         for s in seq:
-    #             s = torch.from_numpy(s).float().to(self.device)
-    #             encoded = self.DS_encoder(s)
-    #             encoded = self.pool(encoded, dim=0)
-    #             embed_seq.append(encoded)
-    #         encoded_sequence = torch.cat(embed_seq, 0).unsqueeze(0).to(self.device)
-    #
-    #     else:
-    #         encoded_sequence = torch.tensor([[0.0]*self.nn_args.latent_space]).to(self.device)
-    #     return encoded_sequence
-
     def act(self, state, memory):
         rockets, interceptors, cities, angle = state
         rockets, mask_r = pad_seq(rockets)
