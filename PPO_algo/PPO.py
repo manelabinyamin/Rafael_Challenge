@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from torch.distributions import Categorical
 from PPO_algo.NN_Model import ActorCritic
+from torchviz import make_dot
 
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")

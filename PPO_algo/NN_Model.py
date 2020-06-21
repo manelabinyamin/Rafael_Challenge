@@ -3,6 +3,7 @@ import torch.nn as nn
 from torch.distributions import Categorical
 import numpy as np
 
+
 class ActorCritic(nn.Module):
     def __init__(self, nn_args, device):
         super(ActorCritic, self).__init__()

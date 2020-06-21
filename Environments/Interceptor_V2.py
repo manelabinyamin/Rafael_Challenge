@@ -73,12 +73,12 @@ class Turret():
     y = 0 # [m]
     x_hostile = 4800
     y_hostile = 0
-    ang_vel = 30 # Turret angular speed [deg/sec]
-    ang = 0 # Turret angle [deg]
-    v0 = 800 # Initial speed [m/sec]
-    prox_radius = 150 # detonation proximity radius [m]
-    reload_time = 1.5 # [sec]
-    last_shot_time = -3 # [sec]
+    ang_vel = 30  # Turret angular speed [deg/sec]
+    ang = 0  # Turret angle [deg]
+    v0 = 800  # Initial speed [m/sec]
+    prox_radius = 150  # detonation proximity radius [m]
+    reload_time = 1.5  # [sec]
+    last_shot_time = -3  # [sec]
     
     def update(self, action_button):
         if action_button == 0:

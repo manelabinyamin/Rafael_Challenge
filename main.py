@@ -15,8 +15,8 @@ from datetime import datetime
 def get_params():
     net_params = {
         'pooling_method': 'max',
-        'latent_space': 50,
-        'hidden_dim': 103,
+        'latent_space': 100,
+        'hidden_dim': 203,
         'action_dim': 4
     }
     return box.Box(net_params)
