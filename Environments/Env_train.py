@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from box import Box
-from Environments.Interceptor_V2 import Init, Draw, Game_step
+from Environments.Interceptor_V2_train import Init, Draw, Game_step, Get_score, Get_rewards
 
 class environment:
     def __init__(self):
@@ -111,4 +111,7 @@ class environment:
         return self.state_space.copy()
 
     def get_game_score(self):
-        return self.total_score
+        return Get_score()
+
+    def get_game_rewards(self):
+        return Get_rewards()

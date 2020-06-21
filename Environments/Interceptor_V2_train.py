@@ -39,9 +39,7 @@ class Turret():
     min_prox_radius = 150
     reload_time = 1.5  # [sec]
     last_shot_time = -3  # [sec]
-
-    def __init__(self, prox_radius):
-        self.prox_radius = prox_radius  # detonation proximity radius [m]
+    prox_radius = 150  # detonation proximity radius [m]
 
     def update(self, action_button):
         if action_button == 0:
@@ -94,7 +92,9 @@ class Rocket():
         self.ang = -88 + np.random.rand() * 68  # [deg]
         self.vx = self.v0 * np.sin(np.deg2rad(self.ang))
         self.vy = self.v0 * np.cos(np.deg2rad(self.ang))
-        rocket_list.append(self)
+        self.hit_city = self.check_if_hit_city()
+        if len(rocket_list) < 10 or True:
+            rocket_list.append(self)
 
     def update(self):
         self.v_loss = (self.vx ** 2 + self.vy ** 2) * world.fric * world.dt
@@ -102,6 +102,22 @@ class Rocket():
         self.vy = self.vy * (1 - self.v_loss) - world.g * world.dt
         self.x = self.x + self.vx * world.dt
         self.y = self.y + self.vy * world.dt
+
+    def simulate_trajectory(self, vx,vy,x,y):
+        while y >= 0:
+            v_loss = (vx ** 2 + vy ** 2) * world.fric * world.dt
+            vx = vx * (1 - v_loss)
+            vy = vy * (1 - v_loss) - world.g * world.dt
+            x = x + vx * world.dt
+            y = y + vy * world.dt
+        return x
+
+    def check_if_hit_city(self):
+        est_x = self.simulate_trajectory(self.vx,self.vy,self.x,self.y)
+        for c in city_list:
+            if np.abs(est_x - c.x) < c.width:
+                return True
+        return False
 
 
 class City():
@@ -146,7 +162,10 @@ def Check_interception():
                 Explosion(intr.x, intr.y)
                 if intr in interceptor_list: interceptor_list.remove(intr)
                 world.score = world.score + world.reward_intercept
-                world.rewards[intr.launch_step] += world.reward_intercept
+                reward = world.reward_intercept  # hit
+                if r.hit_city:  # saved city
+                    reward += -world.reward_city
+                world.rewards[intr.launch_step] += reward
 
 
 def Check_ground_hit():
@@ -158,10 +177,8 @@ def Check_ground_hit():
                     city_hit = True
             if city_hit == True:
                 world.score = world.score + world.reward_city
-                world.rewards[world.step_counter] += world.reward_city
             else:
                 world.score = world.score + world.reward_open
-                world.rewards[world.step_counter] += world.reward_open
             Explosion(r.x, r.y)
             rocket_list.remove(r)
 
@@ -196,12 +213,12 @@ def Draw():
     plt.pause(0.001)
 
 
-def Init(intercection_threshold):
+def Init():
     global world, turret, rocket_list, interceptor_list, city_list, explosion_list
     world = World()
     rocket_list = []
     interceptor_list = []
-    turret = Turret(intercection_threshold)
+    turret = Turret()
     city_list = []
     explosion_list = []
     City(-world.width * 0.5 + 400, -world.width * 0.25 - 400, 800)  # (-4600, -2900)
@@ -247,4 +264,8 @@ def Game_step(action_button):
 
 
 def Get_rewards():
-    return world.rewards.copy()
+    return world.rewards[1:].copy()
+
+
+def Get_score():
+    return world.score

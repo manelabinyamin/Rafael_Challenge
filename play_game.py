@@ -1,6 +1,6 @@
 import numpy as np
 # from Env_train import env_train
-from Env import environment
+from Environments.Env import environment
 import seaborn as sns
 import matplotlib.pyplot as plt
 

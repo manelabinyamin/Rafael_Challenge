@@ -112,3 +112,6 @@ class environment:
 
     def get_game_score(self):
         return self.total_score
+
+    def get_game_rewards(self):
+        return self.all_rewards

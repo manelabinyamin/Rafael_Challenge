@@ -3,6 +3,7 @@ import torch.nn as nn
 from torch.distributions import Categorical
 from PPO_algo.PPO import PPO, Memory
 from Environments.Env import environment
+from Environments.Env_train import environment as environment_train
 from time import time
 import matplotlib.pyplot as plt
 import box
@@ -34,7 +35,7 @@ def main():
     fig, ax = plt.subplots(1, 1)
     plot_scores(ax, [], add_legend=True)
     # creating environment
-    env = environment()
+    env = environment_train()
     render = False
     solved_reward = 100  # stop training if avg_reward > solved_reward
     score_window_size = 20  # window size for smoothed score
@@ -78,10 +79,13 @@ def main():
                     action = ppo.policy_old.act(state, memory)
                     state, reward, done, _ = env.step(action)
 
-                    # Saving reward and is_terminal:
-                    memory.rewards.append(reward)
+                    # Saving is_terminal:
+                    # memory.rewards.append(reward)
                     memory.is_terminals.append(done)
 
+                # get ep rewards
+                game_rewards = env.get_game_rewards()
+                memory.rewards.extend(game_rewards)
                 temp_scores += env.get_game_score()
 
             # save scores
