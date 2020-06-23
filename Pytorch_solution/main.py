@@ -1,22 +1,21 @@
-import torch
-import torch.nn as nn
-from torch.distributions import Categorical
-from PPO_algo.PPO import PPO, Memory
-from Environments.Env import environment
-from Environments.Env_train import environment as environment_train
+from datetime import datetime
 from time import time
-import matplotlib.pyplot as plt
+
 import box
+import matplotlib.pyplot as plt
 import numpy as np
 import os
-from datetime import datetime
+import torch
+
+from Environments.Env_train import environment as environment_train
+from Pytorch_solution.PPO_algo.PPO import PPO, Memory
 
 
 def get_params():
     net_params = {
         'pooling_method': 'max',
-        'latent_space': 100,
-        'hidden_dim': 203,
+        'latent_space': 60,
+        'hidden_dim': 123,
         'action_dim': 4
     }
     return box.Box(net_params)
@@ -36,12 +35,9 @@ def main():
     plot_scores(ax, [], add_legend=True)
     # creating environment
     env = environment_train()
-    render = False
-    solved_reward = 100  # stop training if avg_reward > solved_reward
     score_window_size = 20  # window size for smoothed score
     max_episodes = 10000  # max training episodes
     lr = 1e-4
-    betas = (0.9, 0.999)
     gamma = 0.99  # discount factor
     K_epochs = 5  # update policy for K epochs
     eps_clip = 0.2  # clip parameter for PPO
@@ -54,7 +50,7 @@ def main():
         torch.manual_seed(random_seed)
 
     memory = Memory()
-    ppo = PPO(nn_params, lr, betas, gamma, K_epochs, eps_clip)
+    ppo = PPO(nn_params, lr, gamma, K_epochs, eps_clip)
 
     # training loop
     ep_num = 0

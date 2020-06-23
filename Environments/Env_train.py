@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from box import Box
-from Environments.Interceptor_V2_train import Init, Draw, Game_step, Get_score, Get_rewards
+from Environments.Interceptor_V2_train_2 import Init, Draw, Game_step, Get_score, Get_rewards
 
 class environment:
     def __init__(self):
