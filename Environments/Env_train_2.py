@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from box import Box
-from Interceptor_V2 import Init, Draw, Game_step
+from Environments.Interceptor_V2_train import Init, Draw, Game_step, Get_rewards
 
 class environment:
     def __init__(self):
@@ -21,13 +21,19 @@ class environment:
             'can_shoot': (1,)
         }
         self.state_space = Box(state_space)
+        self.decay_rate = 0.9
+        self.score_target = 100
+        self.last_shoot = -10
+        self.can_shoot = 1.0
 
     def reset(self):
         self.step_count = 0
+        self.last_shoot = -10
+        self.can_shoot = 1.0
         self.done = False
         Init()
         self.all_rewards = []
-        self.total_score = 0
+        self.total_rewards = 0
         self.reward = 0
         r_locs, i_locs, c_locs, ang, _ = Game_step(1)
         # pre-process observation
@@ -35,17 +41,25 @@ class environment:
         return self.obs
 
     def step(self, action):
-        r_locs, i_locs, c_locs, ang, new_score = Game_step(action)
+        r_locs, i_locs, c_locs, ang, score = Game_step(action)
+        # update can_shoot
+        if self.can_shoot and action == 3:
+            self.last_shoot = self.step_count
+            self.can_shoot = 0.0
+        else:
+            if self.step_count - self.last_shoot >= 7:  # reload time is 7 steps
+                self.can_shoot = 1.0
         # processs reward
-        self.reward = new_score - self.total_score
+        self.reward = score - self.total_rewards
         self.all_rewards.append(self.reward)
-        self.total_score = new_score
+        self.total_rewards = score
         # pre-process observation
         self.preprocess_observation(r_locs, i_locs, c_locs, ang)
         # check if done
         self.step_count += 1
         if self.step_count >= self.max_step:
             self.done = True
+            self.reward = Get_rewards()
         return self.obs, self.reward, self.done
 
     def render(self):
@@ -55,17 +69,20 @@ class environment:
         return np.random.choice(self.action_space)
 
     def build_obs_dict(self):
+
         cities = np.array(self.c_locs)
         angle = np.array([self.angle])
         rockets = np.array(self.r_locs)
         interceptors = np.array(self.i_locs)
+        can_shoot = np.array([self.can_shoot])
         obs = {
             'rockets': rockets[np.newaxis,:],
             'interceptors': interceptors[np.newaxis,:],
             'angle': angle[np.newaxis,:],
             'cities': cities[np.newaxis,:],
+            'can_shoot': can_shoot[np.newaxis,:]
         }
-        obs_vec = [obs['rockets'], obs['interceptors'], obs['angle'], obs['cities']]
+        obs_vec = [obs['rockets'], obs['interceptors'], obs['angle'], obs['cities'], obs['can_shoot'].astype(float)]
         return obs_vec
 
     def preprocess_observation(self, r_locs, i_locs, c_locs, ang):
@@ -91,7 +108,7 @@ class environment:
         '''
         return (angle - self.min_angle) / (self.max_angle - self.min_angle)
 
-    def scale_missile(self, missils, type='rockets'):
+    def scale_missile(self, missils, type):
         '''
         scale missile location and velocity
         :param missils: pre-scaled location and velocity
@@ -106,6 +123,7 @@ class environment:
             else:
                 vx, vy = m[2] / self.max_i_vel, m[3] / self.max_i_vel
             scaled_missils.append([x, y, vx, vy])
+
         return scaled_missils
 
     def get_state_space(self):
