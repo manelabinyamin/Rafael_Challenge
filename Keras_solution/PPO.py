@@ -11,7 +11,7 @@ import pprint as pp
 from time import time
 import tensorflow as tf
 from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Input, Dense, concatenate, GlobalMaxPool1D, GlobalAvgPool1D, Multiply
+from tensorflow.keras.layers import Input, Dense, concatenate, Conv2D, Flatten, GlobalMaxPool2D
 from tensorflow.keras import backend as K
 from tensorflow.keras.optimizers import Adam
 import matplotlib.pyplot as plt
@@ -21,7 +21,7 @@ tf.compat.v1.disable_eager_execution()
 import numba as nb
 
 from Environments.Env import environment
-from Environments.Env_train_2 import environment as environment_train
+from Environments.Env_train_cnn import environment as environment_train
 
 """ -------Global Variables------- """
 USE_NEPTUNE = False
@@ -70,35 +70,37 @@ class Agent:
         """ Assemble shared layers
         """
         input_shape = self.state_space
-        mask_rockets = Input(shape=(None,1), name='mask_rockets')
-        mask_interceptors = Input(shape=(None,1), name='mask_interceptors')
+        rockets = Input(shape=input_shape.image, name='rockets')
+        interceptors = Input(shape=input_shape.image, name='interceptors')
         angle = Input(shape=input_shape.angle, name='angle')
         cities = Input(shape=input_shape.cities, name='cities')
         can_shoot = Input(shape=input_shape.can_shoot, name='can_shoot')
 
-        deep_set = self.deep_set_layer()
-        rockets = Input(shape=input_shape.rockets, name='rockets')
-        interceptors = Input(shape=input_shape.interceptors, name='interceptors')
-        combinedInput = concatenate([deep_set([rockets,mask_rockets]), deep_set([interceptors,mask_interceptors]), angle, cities, can_shoot])
+        cnn = self.conv_layers()
+        combinedCNN = concatenate([cnn(rockets), cnn(interceptors)])
+        combinedCNN = Dense(128, activation='relu')(combinedCNN)
+
+        combinedInput = concatenate([combinedCNN, angle, cities, can_shoot])
         x = Dense(128, activation='relu')(combinedInput)
         # x = Dense(128, activation='relu')(x)
-        model = Model(inputs=[mask_rockets, mask_interceptors, rockets, interceptors, angle, cities, can_shoot], outputs=x)
+        model = Model(inputs=[rockets, interceptors, angle, cities, can_shoot], outputs=x)
         return model
 
-    def deep_set_layer(self):
-        """ Assemble Deep-Sets layer
+    def conv_layers(self):
+        """ Assemble conv layers
         """
-
-        input = Input(shape=self.state_space.rockets, name='coordinates')
-
-        mask = Input(shape=(None,1), name='mask')
-        x = Dense(self.latent_space, activation='relu')(input)
-        x = Multiply()([x,mask])
-        pools = {'avg': GlobalAvgPool1D(), 'max': GlobalMaxPool1D()}
-        pool = pools[self.pooling_method]
-        out = pool(x)
-
-        model = Model([input,mask],out)
+        input = Input(shape=self.state_space.image, name='missiles')
+        x = Conv2D(8, kernel_size=8, strides=2, padding='same',
+                   activation='relu')(input)
+        x = Conv2D(16, kernel_size=4, strides=2, padding='same',
+                   activation='relu')(x)
+        x = Conv2D(32, kernel_size=4, strides=2, padding='same',
+                   activation='relu')(x)
+        x = Conv2D(64, kernel_size=4, strides=2, padding='same',
+                   activation='relu')(x)
+        x = GlobalMaxPool2D()(x)
+        out = Dense(128, activation='relu')(x)
+        model = Model(input, out)
         return model
 
     def build_actor(self, head_network):
@@ -138,21 +140,8 @@ class Agent:
         self.render_ep = True if self.render_freq>0 and self.episode%self.render_freq==0 else False
 
     def get_action(self):
-        # build masks
-        if self.observation[0].shape[1]==0:
-            rockets = np.array([[[0,0,0,0]]])
-            mask_r = np.array([[[0]]])
-        else:
-            rockets = self.observation[0]
-            mask_r = np.ones([1,self.observation[0].shape[1],1])
-        if self.observation[1].shape[1]==0:
-            interceptors = np.array([[[0,0,0,0]]])
-            mask_i = np.array([[[0]]])
-        else:
-            interceptors = self.observation[1]
-            mask_i = np.ones([1,self.observation[1].shape[1],1])
         # find action
-        p = self.actor.predict([mask_r,mask_i, rockets, interceptors]+self.observation[2:]+[DUMMY_VALUE, DUMMY_ACTION])
+        p = self.actor.predict(self.observation+[DUMMY_VALUE, DUMMY_ACTION])
         if self.val is False:
             action = np.random.choice(NUM_ACTIONS, p=np.nan_to_num(p[0]))
         else:
@@ -162,24 +151,11 @@ class Agent:
         return action, action_matrix, p
 
     def transform_reward(self):
-        # # loop calculation
-        # for j in range(len(self.reward) - 2, -1, -1):
-        #     self.reward[j] += self.reward[j + 1] * self.args.gamma
-        # matrix calculation
         rewards = np.array([self.reward]).transpose()
         n = rewards.shape[0]
         cols,rows = np.meshgrid(range(n),range(n))
         factors = np.triu(np.power(self.args.gamma, cols-rows))
         self.reward = np.matmul(factors, rewards).tolist()
-
-    def pad_seq(self, seq):
-        lens = list(map(lambda x: x.shape[1], seq)) if len(seq)>0 else [0]
-        max_len = max(max(lens),1)
-        padded_seq = np.zeros([len(seq), max_len, 4])
-        mask = np.arange(max_len) < np.array(lens)[:, None]
-        mask = mask[:,:,np.newaxis]
-        padded_seq[np.repeat(mask,4, axis=-1)] = np.concatenate(list(map(lambda x: x.flatten(),seq)))
-        return padded_seq, mask
 
     def get_batch(self):
         batch = [[[],[],[],[],[]], [], [], []]
@@ -218,9 +194,7 @@ class Agent:
                 tmp_batch = [[], [], []]
                 self.reset_env()
 
-        batch[0][0], mask_rockets = self.pad_seq(batch[0][0])
-        batch[0][1], mask_interceptors = self.pad_seq(batch[0][1])
-        batch[0] = [mask_rockets, mask_interceptors, batch[0][0], batch[0][1]] + [np.concatenate(x) for x in batch[0][2:]]
+        batch[0] = [np.concatenate(x) for x in batch[0]]
         obs, action, pred, reward = batch[0], np.array(batch[1]), np.array(batch[2]), np.reshape(np.array(batch[3]), (len(batch[3]), 1))
         pred = np.reshape(pred, (pred.shape[0], pred.shape[2]))
         return obs, action, pred, reward
@@ -265,7 +239,7 @@ class Agent:
 def main(args):
     if USE_NEPTUNE:
         neptune.init('manelab/Rafael-challenge')
-        neptune.create_experiment(tags=['Keras','PPO','DeepDets'],params=args)
+        neptune.create_experiment(tags=['Keras','PPO','CNN'],params=args)
     ag = Agent(Box(args))
     ag.run()
 
