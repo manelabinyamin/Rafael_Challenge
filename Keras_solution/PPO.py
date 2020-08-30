@@ -1,47 +1,34 @@
 # PPO code from LuEE-c's github repository:
 # https://github.com/LuEE-C/PPO-Keras.git
 # He took his initial framework from: https://github.com/jaara/AI-blog/blob/master/CartPole-A3C.py
-
+import sys, os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np
+from box import Box
 import argparse
+import neptune
 import pprint as pp
-from keras.models import Model
-from keras.layers import Input, Dense, concatenate, GlobalMaxPool1D, GlobalAvgPool1D, Multiply
-from keras import backend as K
-from keras.optimizers import Adam
+from time import time
+import tensorflow as tf
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Input, Dense, concatenate, GlobalMaxPool1D, GlobalAvgPool1D, Multiply
+from tensorflow.keras import backend as K
+from tensorflow.keras.optimizers import Adam
 import matplotlib.pyplot as plt
-from keras.utils import plot_model
+from tensorflow.keras.utils import plot_model
+tf.compat.v1.disable_eager_execution()
 
 import numba as nb
-# from tensorboard import SummaryWriter
-from tensorboardX import SummaryWriter
 
 from Environments.Env import environment
 from Environments.Env_train_2 import environment as environment_train
 
-
-EPISODES = 1000000
-
+""" -------Global Variables------- """
+USE_NEPTUNE = False
 LOSS_CLIPPING = 0.2 # Only implemented clipping for the surrogate loss, paper said it was best
-EPOCHS = 2
-
-GAMMA = 0.95
-
-BUFFER_SIZE = 4000
-BATCH_SIZE = 128
 NUM_ACTIONS = 4
-NUM_STATE = 8
-HIDDEN_SIZE = 128
-NUM_LAYERS = 2
 ENTROPY_LOSS = 1e-3
-LR = 1e-4 # Lower lr stabilises training greatly
-
 DUMMY_ACTION, DUMMY_VALUE = np.zeros((1, NUM_ACTIONS)), np.zeros((1, 1))
-
-
-@nb.jit
-def exponential_average(old, new, b1):
-    return old * b1 + (1-b1) * new
 
 
 def proximal_policy_optimization_loss(advantage, old_prediction):
@@ -55,8 +42,9 @@ def proximal_policy_optimization_loss(advantage, old_prediction):
 
 class Agent:
     def __init__(self, args):
-        self.train = args['train']
-        self.render_freq = args['render_freq']
+        self.args = args
+        self.train = args.train
+        self.render_freq = args.render_freq
         self.render_ep = False
         self.env = environment_train() if self.train else environment()
         self.state_space = self.env.get_state_space()
@@ -74,8 +62,6 @@ class Agent:
         self.val = False
         self.reward = []
         self.reward_over_time = []
-        self.name = 'AllRuns/Interceptor'
-        self.writer = SummaryWriter(self.name)
         self.gradient_steps = 0
         self.avg_reward = []
         self.cur_rewards = []
@@ -119,11 +105,11 @@ class Agent:
         x = Dense(128, activation='relu')(head_network.output)
         x = Dense(64, activation='relu')(x)
         out = Dense(NUM_ACTIONS, activation='softmax')(x)
-        advantage = Input(shape=(1,))
-        old_prediction = Input(shape=(NUM_ACTIONS,))
+        advantage = Input(shape=(1,), name='Advantage')
+        old_prediction = Input(shape=(NUM_ACTIONS,), name='Old_prediction')
         model = Model(head_network.input+[advantage, old_prediction], out)
 
-        model.compile(optimizer=Adam(lr=LR),
+        model.compile(optimizer=Adam(lr=self.args.learning_rate),
                       loss=[proximal_policy_optimization_loss(
                           advantage=advantage,
                           old_prediction=old_prediction)])
@@ -137,7 +123,7 @@ class Agent:
         out = Dense(1, activation='linear')(x)
 
         model = Model(head_network.input, out)
-        model.compile(optimizer=Adam(lr=LR), loss='mse')
+        model.compile(optimizer=Adam(lr=self.args.learning_rate), loss='mse')
         model.summary()
         return model
 
@@ -176,12 +162,15 @@ class Agent:
         return action, action_matrix, p
 
     def transform_reward(self):
-        if self.val is True:
-            self.writer.add_scalar('Val episode reward', np.array(self.reward).sum(), self.episode)
-        else:
-            self.writer.add_scalar('Episode reward', np.array(self.reward).sum(), self.episode)
-        for j in range(len(self.reward) - 2, -1, -1):
-            self.reward[j] += self.reward[j + 1] * GAMMA
+        # # loop calculation
+        # for j in range(len(self.reward) - 2, -1, -1):
+        #     self.reward[j] += self.reward[j + 1] * self.args.gamma
+        # matrix calculation
+        rewards = np.array([self.reward]).transpose()
+        n = rewards.shape[0]
+        cols,rows = np.meshgrid(range(n),range(n))
+        factors = np.triu(np.power(self.args.gamma, cols-rows))
+        self.reward = np.matmul(factors, rewards).tolist()
 
     def pad_seq(self, seq):
         lens = list(map(lambda x: x.shape[1], seq)) if len(seq)>0 else [0]
@@ -192,12 +181,11 @@ class Agent:
         padded_seq[np.repeat(mask,4, axis=-1)] = np.concatenate(list(map(lambda x: x.flatten(),seq)))
         return padded_seq, mask
 
-
     def get_batch(self):
         batch = [[[],[],[],[],[]], [], [], []]
 
         tmp_batch = [[], [], []]
-        while len(batch[1]) < BUFFER_SIZE:
+        while len(batch[1]) < self.args.buffer_size:
             if self.render_ep:
                 self.env.render()
             action, action_matrix, predicted_action = self.get_action()
@@ -215,6 +203,8 @@ class Agent:
                 self.cur_rewards.append(self.env.total_rewards)
 
                 print('Episode: {} ; Score: {}'.format(self.episode, self.reward_over_time[-1]))
+                if USE_NEPTUNE: neptune.log_metric('Rewards', self.reward_over_time[-1])
+
                 self.transform_reward()
                 if self.val is False:
                     for i in range(len(tmp_batch[0])):
@@ -235,25 +225,24 @@ class Agent:
         pred = np.reshape(pred, (pred.shape[0], pred.shape[2]))
         return obs, action, pred, reward
 
-
     def run(self):
         if self.train:
             fig, ax = plt.subplots(1, 1)
 
-
-            while self.episode < EPISODES:
+            while self.episode < self.args.num_episodes:
+                # ep_start_time = time()
                 obs, action, pred, reward = self.get_batch()
-                obs = [obs[k][:BUFFER_SIZE] for k in range(len(obs))]
-                # obs = {k: obs[k][:BUFFER_SIZE] for k in obs}
-                action, pred, reward = action[:BUFFER_SIZE], pred[:BUFFER_SIZE], reward[:BUFFER_SIZE]
+                obs = [obs[k][:self.args.buffer_size] for k in range(len(obs))]
+                action, pred, reward = action[:self.args.buffer_size], pred[:self.args.buffer_size], reward[:self.args.buffer_size]
                 old_prediction = pred
                 pred_values = self.critic.predict(obs)
 
                 advantage = reward - pred_values
-                actor_loss = self.actor.fit(x=obs+[advantage, old_prediction], y=action, batch_size=BATCH_SIZE, shuffle=True, epochs=EPOCHS, verbose=False)
-                critic_loss = self.critic.fit(obs, reward, batch_size=BATCH_SIZE, shuffle=True, epochs=EPOCHS, verbose=False)
-                self.writer.add_scalar('Actor loss', actor_loss.history['loss'][-1], self.gradient_steps)
-                self.writer.add_scalar('Critic loss', critic_loss.history['loss'][-1], self.gradient_steps)
+                actor_loss = self.actor.fit(x=obs+[advantage, old_prediction], y=action, batch_size=self.args.batch_size, shuffle=True, epochs=self.args.epochs, verbose=False)
+                critic_loss = self.critic.fit(obs, reward, batch_size=self.args.batch_size, shuffle=True, epochs=self.args.epochs, verbose=False)
+                if USE_NEPTUNE:
+                    neptune.log_metric('Actor loss', actor_loss.history['loss'][-1])
+                    neptune.log_metric('Critic loss', critic_loss.history['loss'][-1])
 
                 self.gradient_steps += 1
 
@@ -274,7 +263,10 @@ class Agent:
 
 
 def main(args):
-    ag = Agent(args)
+    if USE_NEPTUNE:
+        neptune.init('manelab/Rafael-challenge')
+        neptune.create_experiment(tags=['Keras','PPO','DeepDets'],params=args)
+    ag = Agent(Box(args))
     ag.run()
 
 
@@ -286,6 +278,13 @@ if __name__ == '__main__':
     parser.add_argument('--train', help='Do you want to train the agent (False = test)', type=bool, default=True)
     parser.add_argument('--render_freq', help='render frequency (number of episodes). If 0, the environment will not be rendered',
                         type=int, default=0)
+    parser.add_argument('--num_episodes', type=int, default=1e6)
+    parser.add_argument('--epochs', type=int, default=2)
+    parser.add_argument('--gamma', type=int, default=0.95)
+    parser.add_argument('--buffer_size', type=int, default=4000)
+    parser.add_argument('--batch_size', type=int, default=128)
+    parser.add_argument('--learning_rate', type=int, default=1e-4)
+
     args = vars(parser.parse_args())
 
     pp.pprint(args)
