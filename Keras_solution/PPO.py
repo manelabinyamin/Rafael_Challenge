@@ -24,7 +24,7 @@ from Environments.Env import environment
 from Environments.Env_train_cnn import environment as environment_train
 
 """ -------Global Variables------- """
-USE_NEPTUNE = False
+USE_NEPTUNE = True
 LOSS_CLIPPING = 0.2 # Only implemented clipping for the surrogate loss, paper said it was best
 NUM_ACTIONS = 4
 ENTROPY_LOSS = 1e-3
@@ -55,6 +55,7 @@ class Agent:
         self.actor = self.build_actor(head_network)
         plot_model(self.critic, to_file='critic_network.png', show_shapes=True)
         plot_model(self.actor, to_file='actor_network.png', show_shapes=True)
+        plot_model(self.conv_layers(), to_file='cnn_head_network.png', show_shapes=True)
 
         # print(self.env.action_space, 'action_space', self.env.observation_space, 'observation_space')
         self.episode = 0
